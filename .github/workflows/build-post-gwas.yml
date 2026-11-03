@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # 1. Download official VariantAgent source
+      # 1. Download VariantAgent
       - name: Checkout VariantAgent
         uses: actions/checkout@v4
         with:
@@ -21,18 +21,42 @@ jobs:
           ref: main
           path: VariantAgent
 
-      # 2. Check available storage
+      # 2. Fix unavailable Python dependency
+      - name: Fix canton Python dependencies
+        run: |
+          set -euo pipefail
+
+          REQ="VariantAgent/docker/config/canton_pip_requirements.txt"
+
+          echo "Before:"
+          grep -n '^fitz==0\.0\.1\.dev2$' "$REQ"
+
+          sed -i \
+            's/^fitz==0\.0\.1\.dev2$/PyMuPDF==1.26.6/' \
+            "$REQ"
+
+          echo "After:"
+          grep -n '^PyMuPDF==1\.26\.6$' "$REQ"
+
+          if grep -q '^fitz==' "$REQ"; then
+            echo "ERROR: old fitz dependency remains"
+            exit 1
+          fi
+
+          echo "Dependency fix successful"
+
+      # 3. Check system resources
       - name: Check resources
         run: |
           nproc
           free -h
           df -h
 
-      # 3. Set up Docker Buildx
+      # 4. Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 4. Log in to GitHub Container Registry
+      # 5. Login to GHCR
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -40,7 +64,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 5. Build complete post-GWAS image
+      # 6. Build and push full environment
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -51,7 +75,7 @@ jobs:
           tags: ghcr.io/liqian02121111-hub/post-gwas:v1
           provenance: false
 
-      # 6. Display result
+      # 7. Finish
       - name: Finished
         run: |
           echo "Build completed successfully"
