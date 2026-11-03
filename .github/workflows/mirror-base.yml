@@ -1,0 +1,47 @@
+name: Mirror VariantAgent base image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Install crane
+        run: |
+          curl -fsSL \
+            https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz \
+            -o /tmp/crane.tar.gz
+          sudo tar -xzf /tmp/crane.tar.gz \
+            -C /usr/local/bin crane
+          crane version
+
+      - name: Login to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | crane auth login ghcr.io \
+            -u "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Copy image to GHCR
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+
+          SOURCE="docker.io/interndiscoveryscp/scp-code:v2"
+          TARGET="ghcr.io/${OWNER_LOWER}/scp-code:v2"
+
+          crane copy \
+            --platform linux/amd64 \
+            --jobs 2 \
+            "$SOURCE" "$TARGET"
+
+          echo "Mirror image: $TARGET"
+          crane digest --platform linux/amd64 "$TARGET"
